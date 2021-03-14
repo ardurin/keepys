@@ -79,6 +79,8 @@ int get_secret(Path *path, const char *password, size_t password_size)
 		return ERROR_PASSWORD;
 
 	fwrite(secret, 1, SECRET_SIZE, stdout);
+	if (isatty(1))
+		puts("");
 
 	return 0;
 }
