@@ -1,16 +1,29 @@
 #include <errno.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#ifdef WOLFSSL
 #include <wolfssl/options.h>
 #include <wolfssl/wolfcrypt/chacha20_poly1305.h>
 #include <wolfssl/wolfcrypt/coding.h>
+#else
+#include <openssl/evp.h>
+typedef unsigned char byte;
+#endif
 #include "error.h"
 #include "path.h"
 #include "random.h"
 
-#define AUTHENTICATION CHACHA20_POLY1305_AEAD_AUTHTAG_SIZE
-#define SALT CHACHA20_POLY1305_AEAD_IV_SIZE
+#define AUTHENTICATION 16
+#define KEY 32
+#define SALT 12
 #define SECRET 16
 
 #define min(a, b) a < b ? a : b
+
+static inline int base64_size(int size) {
+	return ((4 * size / 3 + 3) & ~3) + 1;
+}
 
 int create_secret(Path *path, const char *password, size_t password_size)
 {
@@ -30,10 +43,13 @@ int create_secret(Path *path, const char *password, size_t password_size)
 	if (generate_random(salt, SALT) < 0)
 		return ERROR_GENERATOR;
 
-	byte key[CHACHA20_POLY1305_AEAD_KEYSIZE] = {0};
-	size_t limit = min(password_size, CHACHA20_POLY1305_AEAD_KEYSIZE);
+	byte key[KEY] = {0};
+	size_t limit = min(password_size, KEY);
 	memcpy((void *)key, password, limit);
 
+	unsigned int encoded_size = base64_size(size);
+
+#ifdef WOLFSSL
 	wc_ChaCha20Poly1305_Encrypt(
 		(byte *)key,
 		salt,
@@ -44,9 +60,25 @@ int create_secret(Path *path, const char *password, size_t password_size)
 	);
 
 	// base64 data + linebreak
-	unsigned int encoded_size = ((4 * size / 3 + 3) & ~3) + 1;
 	byte encoded[encoded_size];
 	Base64_Encode(plain, AUTHENTICATION + SALT + SECRET, encoded, &encoded_size);
+#else
+	EVP_CIPHER_CTX *cipher = EVP_CIPHER_CTX_new();
+	if (cipher == NULL)
+		return ERROR_MEMORY;
+	if (EVP_EncryptInit(cipher, EVP_chacha20_poly1305(), key, salt) < 1)
+		return ERROR_MEMORY;
+	int unused;
+	if (EVP_EncryptUpdate(cipher, encrypted_secret, &unused, secret, SECRET) < 1)
+		return ERROR_MEMORY;
+	if (EVP_EncryptFinal(cipher, encrypted_secret, &unused) < 1)
+		return ERROR_MEMORY;
+	EVP_CIPHER_CTX_ctrl(cipher, EVP_CTRL_GCM_GET_TAG, AUTHENTICATION, authentication);
+	EVP_CIPHER_CTX_free(cipher);
+
+	byte encoded[encoded_size];
+	EVP_EncodeBlock(encoded, plain, AUTHENTICATION + SALT + SECRET);
+#endif
 
 	const char *directory = get_directory(path);
 	if (mkdir(directory, 0700) < 0 && errno != EEXIST)
@@ -71,19 +103,27 @@ int get_secret(Path *path, const char *password, size_t password_size)
 		return ERROR_FILE;
 	fclose(file);
 
+#ifdef WOLFSSL
 	// https://www.wolfssl.com/documentation/manuals/wolfssl/group__Base__Encoding.html#function-base64_decode
 	unsigned int capacity = (size * 3 + 3) / 4;
 	byte plain[capacity];
 	Base64_Decode(encoded, size, plain, &capacity);
+#else
+	byte plain[AUTHENTICATION + SALT + SECRET + 1];
+	if (EVP_DecodeBlock(plain, encoded, size) < 0)
+		return ERROR_MEMORY;
+#endif
+
 	byte *authentication = plain;
 	byte *salt = authentication + AUTHENTICATION;
 	byte *encrypted_secret = salt + SALT;
 
-	byte key[CHACHA20_POLY1305_AEAD_KEYSIZE] = {0};
-	size_t limit = min(password_size, CHACHA20_POLY1305_AEAD_KEYSIZE);
+	byte key[KEY] = {0};
+	size_t limit = min(password_size, KEY);
 	memcpy((void *)key, password, limit);
 	
 	byte secret[SECRET];
+#ifdef WOLFSSL
 	if (wc_ChaCha20Poly1305_Decrypt(
 		key,
 		salt,
@@ -93,6 +133,20 @@ int get_secret(Path *path, const char *password, size_t password_size)
 		secret		
 	) < 0)
 		return ERROR_PASSWORD;
+#else
+	EVP_CIPHER_CTX *cipher = EVP_CIPHER_CTX_new();
+	if (cipher == NULL)
+		return ERROR_MEMORY;
+	if (EVP_DecryptInit(cipher, EVP_chacha20_poly1305(), key, salt) < 1)
+		return ERROR_MEMORY;
+	int unused;
+	if (EVP_DecryptUpdate(cipher, secret, &unused, encrypted_secret, SECRET) < 1)
+		return ERROR_MEMORY;
+	EVP_CIPHER_CTX_ctrl(cipher, EVP_CTRL_GCM_SET_TAG, AUTHENTICATION, authentication);
+	if (EVP_DecryptFinal(cipher, encrypted_secret, &unused) < 1)
+		return ERROR_PASSWORD;
+	EVP_CIPHER_CTX_free(cipher);
+#endif
 
 	fwrite(secret, 1, SECRET, stdout);
 	if (isatty(1))
