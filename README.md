@@ -9,5 +9,5 @@ Files are encrypted with a master password.
 Usage:
 
 ```
-keepys {create|get} <password>
+keepys {create|get} <name>
 ```
