@@ -8,7 +8,7 @@
 typedef struct
 {
 	const char *name;
-	int (*function)(Path *, const char *, size_t);
+	int (*function)(Path *, const char *);
 }
 Command;
 
@@ -20,14 +20,13 @@ static inline void start(char **argv, int *status)
 	};
 	for (Command *command = available; command < available + 2; command ++) {
 		if (strcmp(argv[1], command->name) == 0) {
-			String password;
-			if ((*status = read_input(&password)) < 0)
+			char password[SIZE_PASSWORD] = {0};
+			if ((*status = read_input(password, SIZE_PASSWORD)) < 0)
 				return;
 			Path path = {0};
 			if ((*status = create_path(&path, argv[2])) < 0)
 				return;
-			*status = command->function(&path, password.text, password.size);
-			free((void *)password.text);
+			*status = command->function(&path, password);
 			free((void *)path.path);
 			return;
 		}

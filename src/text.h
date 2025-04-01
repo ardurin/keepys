@@ -1,10 +1,3 @@
 #include <stdlib.h>
 
-typedef struct
-{
-	char *text;
-	size_t size;
-}
-String;
-
-int read_input(String *);
+int read_input(char *, size_t);

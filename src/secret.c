@@ -15,17 +15,14 @@ typedef unsigned char byte;
 #include "random.h"
 
 #define AUTHENTICATION 16
-#define KEY 32
 #define SALT 12
 #define SECRET 16
-
-#define min(a, b) a < b ? a : b
 
 static inline int base64_size(int size) {
 	return ((4 * size / 3 + 3) & ~3) + 1;
 }
 
-int create_secret(Path *path, const char *password, size_t password_size)
+int create_secret(Path *path, const char *key)
 {
 	if (initialize() < 0)
 		return ERROR_GENERATOR;
@@ -42,10 +39,6 @@ int create_secret(Path *path, const char *password, size_t password_size)
 
 	if (generate_random(salt, SALT) < 0)
 		return ERROR_GENERATOR;
-
-	byte key[KEY] = {0};
-	size_t limit = min(password_size, KEY);
-	memcpy((void *)key, password, limit);
 
 	unsigned int encoded_size = base64_size(size);
 
@@ -66,7 +59,7 @@ int create_secret(Path *path, const char *password, size_t password_size)
 	EVP_CIPHER_CTX *cipher = EVP_CIPHER_CTX_new();
 	if (cipher == NULL)
 		return ERROR_MEMORY;
-	if (EVP_EncryptInit(cipher, EVP_chacha20_poly1305(), key, salt) < 1)
+	if (EVP_EncryptInit(cipher, EVP_chacha20_poly1305(), (byte *)key, salt) < 1)
 		return ERROR_MEMORY;
 	int unused;
 	if (EVP_EncryptUpdate(cipher, encrypted_secret, &unused, secret, SECRET) < 1)
@@ -92,7 +85,7 @@ int create_secret(Path *path, const char *password, size_t password_size)
 	return 0;
 }
 
-int get_secret(Path *path, const char *password, size_t password_size)
+int get_secret(Path *path, const char *key)
 {
 	FILE *file = fopen(get_file(path), "r");
 	if (file == NULL)
@@ -118,14 +111,10 @@ int get_secret(Path *path, const char *password, size_t password_size)
 	byte *salt = authentication + AUTHENTICATION;
 	byte *encrypted_secret = salt + SALT;
 
-	byte key[KEY] = {0};
-	size_t limit = min(password_size, KEY);
-	memcpy((void *)key, password, limit);
-	
 	byte secret[SECRET];
 #ifdef WOLFSSL
 	if (wc_ChaCha20Poly1305_Decrypt(
-		key,
+		(byte *)key,
 		salt,
 		NULL, 0,
 		encrypted_secret, SECRET,
@@ -137,7 +126,7 @@ int get_secret(Path *path, const char *password, size_t password_size)
 	EVP_CIPHER_CTX *cipher = EVP_CIPHER_CTX_new();
 	if (cipher == NULL)
 		return ERROR_MEMORY;
-	if (EVP_DecryptInit(cipher, EVP_chacha20_poly1305(), key, salt) < 1)
+	if (EVP_DecryptInit(cipher, EVP_chacha20_poly1305(), (byte *)key, salt) < 1)
 		return ERROR_MEMORY;
 	int unused;
 	if (EVP_DecryptUpdate(cipher, secret, &unused, encrypted_secret, SECRET) < 1)

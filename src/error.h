@@ -3,3 +3,5 @@
 #define ERROR_GENERATOR -3
 #define ERROR_MEMORY    -4
 #define ERROR_PASSWORD  -5
+
+#define SIZE_PASSWORD 32

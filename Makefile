@@ -13,7 +13,7 @@ static: $(OBJECTS)
 	cc -flto -o $(NAME) -static $^ $(LIBRARIES)
 
 %.o: src/%.c
-	cc $(OPTIONS) -c -O2 -o $@ -s -Wall $<
+	cc $(OPTIONS) -c -O2 -o $@ -s -Wall -Wextra $<
 
 clean:
 	rm -f $(NAME) $(OBJECTS)
