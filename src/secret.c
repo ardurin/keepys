@@ -71,6 +71,7 @@ int create_secret(Path *path, const char *key)
 
 	byte encoded[encoded_size];
 	EVP_EncodeBlock(encoded, plain, AUTHENTICATION + SALT + SECRET);
+	encoded[encoded_size - 1] = '\n';
 #endif
 
 	const char *directory = get_directory(path);
