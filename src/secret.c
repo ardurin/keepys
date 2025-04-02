@@ -10,16 +10,16 @@
 #include <openssl/evp.h>
 typedef unsigned char byte;
 #endif
-#include "error.h"
 #include "path.h"
 #include "random.h"
+#include "values.h"
 
 #define AUTHENTICATION 16
 #define SALT 12
 #define SECRET 16
 
 static inline int base64_size(int size) {
-	return ((4 * size / 3 + 3) & ~3) + 1;
+	return (4 * size / 3 + 3) & ~3;
 }
 
 int create_secret(Path *path, const char *key)
@@ -40,7 +40,7 @@ int create_secret(Path *path, const char *key)
 	if (generate_random(salt, SALT) < 0)
 		return ERROR_GENERATOR;
 
-	unsigned int encoded_size = base64_size(size);
+	unsigned int encoded_size = base64_size(size) + 1;
 
 #ifdef WOLFSSL
 	wc_ChaCha20Poly1305_Encrypt(
@@ -52,7 +52,6 @@ int create_secret(Path *path, const char *key)
 		authentication
 	);
 
-	// base64 data + linebreak
 	byte encoded[encoded_size];
 	Base64_Encode(plain, AUTHENTICATION + SALT + SECRET, encoded, &encoded_size);
 #else
@@ -91,7 +90,7 @@ int get_secret(Path *path, const char *key)
 	FILE *file = fopen(get_file(path), "r");
 	if (file == NULL)
 		return ERROR_FILE;
-	unsigned int size = (4 * (AUTHENTICATION + SALT + SECRET) / 3 + 3) & ~3;
+	unsigned int size = base64_size(AUTHENTICATION + SALT + SECRET);
 	byte encoded[size];
 	if (fread(encoded, 1, size, file) < size)
 		return ERROR_FILE;

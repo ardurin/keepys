@@ -1,5 +1,5 @@
-#include "error.h"
 #include "text.h"
+#include "values.h"
 #include <stdio.h>
 #include <termios.h>
 #include <unistd.h>
