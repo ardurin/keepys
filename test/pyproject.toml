@@ -1,0 +1,10 @@
+[project]
+name = "keepys"
+version = "1.0.0"
+dependencies = [
+	'cryptography == 44.0.2'
+]
+
+[tool.ruff.format]
+indent-style = "tab"
+quote-style = "single"
