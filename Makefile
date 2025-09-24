@@ -7,13 +7,13 @@ OPTIONS =
 # OPTIONS = -D WOLFSSL
 
 all: $(OBJECTS)
-	cc -o $(NAME) $^ $(LIBRARIES)
+	cc -flto -o $(NAME) $^ $(LIBRARIES)
 
 static: $(OBJECTS)
 	cc -flto -o $(NAME) -static $^ $(LIBRARIES)
 
 %.o: src/%.c
-	cc $(OPTIONS) -c -O2 -o $@ -s -Wall -Wextra $<
+	cc $(OPTIONS) -c -flto -O2 -o $@ -s -Wall -Wextra $<
 
 clean:
 	rm -f $(NAME) $(OBJECTS)
